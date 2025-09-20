@@ -8,6 +8,9 @@ import pickle
 import pandas as pd
 from .input_signal_subsampled import ScriptExit
 import time
+from .models import get_predict_function
+import random
+random.seed(42)
 
 def get_qary_indices(params):
     """
@@ -76,6 +79,36 @@ def get_qary_indices(params):
     file_path = os.path.join(exp_dir, 'test')
     if not os.path.exists(file_path):
         os.makedirs(file_path, exist_ok=True)
+
+    # If M{i}_D{i}_queryindices.pickle is already generated, check to make sure the parameters of b, num_subsample, and num_repeat are correct.
+    # Else, re-generate them
+    random_i = random.randint(0, num_subsample - 1)
+    random_j = random.randint(0, num_repeat - 1)
+    query_indices_file = exp_dir / "train" / "samples" / f"M{random_i}_D{random_j}_queryindices.pickle"
+    if not query_indices_file.exists():
+        pass
+    try:
+        query_indices = load_data(query_indices_file)        
+        # Check if the shape matches the expected dimensions
+        if not (query_indices.shape[0] == q**b and query_indices.shape[2] == n):
+            # Incorrect shape. Deleting files so they can be regenerated.
+            for i in range(num_subsample):
+                for j in range(num_repeat):
+                    file_types = ["_queryindices", "_qaryindices", ""]
+                    for file_type in file_types:
+                        file_path = exp_dir / "train" / "samples" / f"M{i}_D{j}{file_type}.pickle"
+                        if file_path.exists():
+                            os.remove(file_path)
+    except Exception as e:
+        # If file cannot be loaded, delete so it can be regenerated too
+        for i in range(num_subsample):
+            for j in range(num_repeat):
+                file_types = ["_queryindices", "_qaryindices", ""]
+                for file_type in file_types:
+                    file_path = exp_dir / "train" / "samples" / f"M{i}_D{j}{file_type}.pickle"
+                    if file_path.exists():
+                        os.remove(file_path)
+
     try:
         helper = Helper(signal_args=signal_args, methods=["qsft"], subsampling_args=query_args, test_args=test_args, exp_dir=exp_dir)
     except ScriptExit:
@@ -103,6 +136,9 @@ def compute_fourier_samples(params, complex_queries=False, verbose=True):
     D = params["num_repeat"]
     exp_dir = params["exp_dir"]
     sampling_function = params["sampling_function"]
+
+    # Wrap sampling function as a callable, depending on the model passed
+    sampling_function = get_predict_function(sampling_function, params["n"], params["q"]) 
 
 
 
@@ -142,6 +178,8 @@ def compute_fourier_samples(params, complex_queries=False, verbose=True):
                 flag = False
 
             if flag:
+                if sampling_function is None:
+                    raise ValueError("Sampling function not defined!")
                 all_query_indices = np.concatenate(query_indices)
 
                 all_samples = np.zeros((np.shape(all_query_indices)[0], 1), dtype=complex)
@@ -155,7 +193,6 @@ def compute_fourier_samples(params, complex_queries=False, verbose=True):
                     for k in range(len(query_indices)):
                         sample[k] = arr[k * block_length: (k+1) * block_length]
                     sample = sample.T
-                    save_data(sample, sample_file)
                     save_data(sample, sample_file_mean)
 
 
@@ -163,7 +200,6 @@ def compute_fourier_samples(params, complex_queries=False, verbose=True):
     # Save the empirical mean separately
     folder_path = os.path.join(exp_dir)
     mean_file = os.path.join(exp_dir, "train", "samples", "train_mean.npy") 
-
     if not os.path.isfile(mean_file):
         all_samples = []
         for i in range(M):
@@ -180,13 +216,14 @@ def compute_fourier_samples(params, complex_queries=False, verbose=True):
     for i in range(M):
         for j in range(D):
             sample_file_zeromean = os.path.join(exp_dir, "train", "samples", "M{}_D{}.pickle".format(i, j))
-            sample_file = os.path.join(exp_dir, "train", "samples_mean", "M{}_D{}.pickle".format(i, j))
-            samples = np.array(load_data(sample_file), dtype=complex)
-            if not complex_queries:
-                samples_zeromean = samples - all_samples_mean
-            else:
-                samples_zeromean = samples
-            save_data(samples_zeromean, sample_file_zeromean)
+            sample_file_mean = os.path.join(exp_dir, "train", "samples_mean", "M{}_D{}.pickle".format(i, j))
+            if not os.path.isfile(sample_file_zeromean):
+                samples = np.array(load_data(sample_file_mean), dtype=complex)
+                if not complex_queries:
+                    samples_zeromean = samples - all_samples_mean
+                else:
+                    samples_zeromean = samples
+                save_data(samples_zeromean, sample_file_zeromean)
 
 
 
@@ -208,6 +245,8 @@ def compute_fourier_samples(params, complex_queries=False, verbose=True):
         flag = False
 
     if flag:
+        if sampling_function is None:
+            raise ValueError("Sampling function not defined!")
         all_query_indices = query_indices
 
         all_samples = np.zeros((np.shape(all_query_indices)[0], 1), dtype=complex)
@@ -261,8 +300,6 @@ def run_fourier(params, verbose=True):
         hyperparam (bool): Whether to use a hyperparameter.
         hyperparam_range (list): The range of hyperparameters search over to find optimal noise_sd is hyperparam is True: [min, max, step].
     """
-    start_time = time.time()
-
     # Extract parameters from dictionary
     q = params["q"]
     n = params["n"]
@@ -408,7 +445,6 @@ def run_fourier(params, verbose=True):
 
     else:
         model_kwargs["noise_sd"] = noise_sd
-        start_time_fourier = time.time()
         model_result = helper.compute_model(method="qsft", model_kwargs=model_kwargs, report=True, verbosity=0)
         test_kwargs["beta"] = model_result.get("gwht")
         nmse, r2_value = helper.test_model("qsft", **test_kwargs)
@@ -417,24 +453,14 @@ def run_fourier(params, verbose=True):
         n_used = model_result.get("n_samples")
         avg_hamming_weight = model_result.get("avg_hamming_weight")
         max_hamming_weight = model_result.get("max_hamming_weight")
-        end_time_fourier = time.time()
-        elapsed_time_fourier = end_time_fourier - start_time_fourier
-        if verbose:
-            print('----------')
-            print(f"Fourier runtime: {elapsed_time_fourier} seconds")
-            print(f"R^2 is {r2_value}")
-            print(f"NMSE is {nmse}")
+        print('----------')
+        print(f"R^2 is {r2_value:.2f}")
 
     with open(str(exp_dir) + "/" + "fourier_transform.pickle", "wb") as pickle_file:
         pickle.dump(gwht, pickle_file)
 
-    if verbose:
-        summarize_results(locations, gwht, q, n, b, noise_sd, n_used, r2_value, nmse, avg_hamming_weight, max_hamming_weight, exp_dir, params)
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-    if verbose:
-        print(f"Total time: {elapsed_time} seconds")
-        print('----------')
+    summarize_results(locations, gwht, q, n, b, noise_sd, n_used, r2_value, nmse, avg_hamming_weight, max_hamming_weight, exp_dir, params)
+    print('----------')
 
 
 def evaluate_nmse(params, search_range, verbose=True):
@@ -517,7 +543,6 @@ def evaluate_nmse(params, search_range, verbose=True):
     return np.array(nmse_results)
 
 
-
 def compute_subsampled_fourier_transforms(params, exp_dir):
     """
     Computes subsampled Fourier transforms (transforms/U{i}_{j}) for all samples (samples/M{i}_D{j}.pickle) in params['exp_dir']
@@ -557,4 +582,3 @@ def compute_subsampled_fourier_transforms(params, exp_dir):
                     Us[i][j][b] = compute_subtransform(samples, q, b)
                 if exp_dir:
                     save_data((Us[i][j], transformTimes[i][j]), transform_file)
-

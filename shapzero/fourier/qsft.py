@@ -9,7 +9,6 @@ from .utils import bin_to_dec, qary_vec_to_dec, sort_qary_vecs, calc_hamming_wei
 from pathlib import Path
 
 import cmath
-from sklearn.linear_model import Ridge
 import math
 
 class QSFT(Signal):

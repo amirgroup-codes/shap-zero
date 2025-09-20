@@ -4,7 +4,6 @@ Utility functions.
 import numpy as np
 from scipy.fftpack import fft
 import numpy.fft as fft
-from sklearn.linear_model import Ridge
 import itertools
 import math
 import random

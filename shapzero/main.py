@@ -13,6 +13,10 @@ from .shap.shap_explainer import shap_explainer
 import matplotlib.pyplot as plt 
 from matplotlib.colors import Normalize
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+import warnings
+import json
+import os
+import pandas as pd
 
 DNA_ENCODING = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
 RNA_ENCODING = {'A': 0, 'C': 1, 'G': 2, 'U': 3}
@@ -26,12 +30,21 @@ class Explainer:
     """
     An explainer object that 1) computes the q-ary Fourier transform of a given sampling function, 2) converts the Fourier transform to SHAP zero values and interactions, and 3) plots the results.
     """
-    def __init__(self, q, n, sampling_function, exp_dir):
+    def __init__(self, q, n, exp_dir, sampling_function, fourier_transform, fourier_params):
         self.q = q
         self.n = n
         self.sampling_function = sampling_function
         self.exp_dir = Path(exp_dir)
-        self.fourier_transform = None
+        self.fourier_transform = fourier_transform
+        if self.fourier_transform is not None:
+            if isinstance(self.fourier_transform, (str, Path)):
+                fourier_path = str(self.fourier_transform)
+                self.fourier_transform = np.load(fourier_path, allow_pickle=True)
+            elif isinstance(self.fourier_transform, dict):
+                pass
+            else:
+                raise TypeError("fourier_transform must be a Path, a string, or a dictionary.")
+        self.run_params = fourier_params
         self.exp_dir.mkdir(parents=True, exist_ok=True)
         print(f"Output files will be saved in: {self.exp_dir.resolve()}")
 
@@ -50,9 +63,17 @@ class Explainer:
             A dictionary representing the sparse Fourier transform.
         """
         # Find the best parameters to use within the budget
-        self.run_params = self._find_best_params(budget)
+        # Load in parameters, otherwise generate
+        if self.run_params:
+            self._check_run_params()    
+        else:
+            self.run_params = self._find_best_params(budget)
+            output_path = os.path.join(self.exp_dir, "params.json")
+            with open(output_path, 'w') as f:
+                json.dump(self.run_params, f, indent=4)
+            print(f"Fourier parameters saved to {output_path}")
         if verbose:
-            print(f"Optimized parameters found: b={self.run_params['b']}, num_subsample (C)={self.run_params['num_subsample']}, num_repeat (P1)={self.run_params['num_repeat']}. Expected samples to compute: {self.run_params['total_samples']}")
+            print(f"Optimized parameters found: b={self.run_params['b']}, num_subsample (C)={self.run_params['num_subsample']}, num_repeat (P1)={self.run_params['num_repeat']}. Expected samples to compute: {self.run_params['total_samples_required']}")
 
         # Compute samples and subsampled Fourier transforms
         parameters = {
@@ -154,11 +175,9 @@ class Explainer:
         if transform_file.exists():
             with open(transform_file, "rb") as f:
                 self.fourier_transform = pickle.load(f)
-            if verbose:
-                print("Successfully computed and loaded the Fourier transform.")
+            print(f"Successfully computed and loaded the Fourier transform at {transform_file}")
         else:
-            if verbose:
-                print("Warning: Fourier transform file was not generated.")
+            warnings.warn("Warning: Fourier transform file was not generated.")
             self.fourier_transform = None
         return self.fourier_transform
         
@@ -189,17 +208,25 @@ class Explainer:
             raise TypeError(f"Input must be a string (e.g. 'ACGTACGTAC') or a list of strings (e.g. ['ACGTACGTAC', 'ACGTACGTAC', 'ACGTACGTAC']), but got {type(sample)}")
 
 
-    def plot(self, output_path, title=None, y_label=None, min_order=2, legend=True):
+    def plot(self, output_path=None, title=None, y_label=None, min_order=2, legend=True):
         """
         Plots the SHAP zero values and interactions for the input sequences.
 
         Args:
-            output_path (str): The path where the output plot image will be saved.
+            output_path (str, optional): The path where the output plot image will be saved.
             title (str, optional): The title for the plot.
             y_label (str, optional): The label for the y-axis.
             min_order (int, optional): The minimum order of interactions to include in the plot (only for interaction plots).
             legend (bool, optional): Whether to include a legend in the plot.
         """
+        if output_path is None:
+            if self.explantion == 'shap_value':
+                output_path = self.exp_dir / 'shap_values.png'
+            elif self.explantion == 'interaction':
+                output_path = self.exp_dir / 'interaction.png'
+            else: 
+                raise ValueError(f"Explanation method {self.explantion} not supported.")
+
         if self.q != 4 and self.q != 20:
             raise ValueError(f"Plotting is only supported for q=4 and q=20. q={self.q} is not supported.")
     
@@ -221,6 +248,74 @@ class Explainer:
             self._plot_interactions_proteins(output_path=output_path, title=title, y_label=y_label, legend=True)
         else:
             raise ValueError(f"Explanation method {self.explantion} not supported.")
+
+
+    def save(self, output_folder=None, top_values=10, min_order=2):
+        """
+        Save all SHAP zero values and interactions, as well as the top values and interactions, for the input sequences.
+
+        Args:
+            output_folder (str, optional): Folder where the output csv will be saved.
+            top_values (int, optional): How many values to save per positive and negative grouping.
+            min_order (int, optional): The minimum order of interactions to include in the plot (only for interaction plots).
+        """
+        if output_folder is None:
+            output_folder = self.exp_dir
+        else:
+            output_folder = Path(output_folder)
+
+        if self.explantion == 'shap_value':
+            self._save_top_shap_values(output_folder, top_values=top_values)
+            self._save_all_shap_values(output_folder)
+        elif self.explantion == 'interaction':
+            self._save_top_interactions(output_folder, top_values=top_values, min_order=min_order)
+            self._save_all_interactions(output_folder)
+        else:
+            raise ValueError(f"Explanation method {self.explantion} not supported.")
+
+
+    def _check_run_params(self):
+        """
+        Checks to make sure self.run_params is formatted properly as a json, a valid path as a string, or a dictionary.
+        """
+        if isinstance(self.run_params, (str, Path)):
+            output_path = Path(self.exp_dir) / "params.json"
+            try:
+                with open(self.run_params, 'r') as f:
+                    loaded_params = json.load(f)
+                # Check for required parameters and update total_samples_required
+                required_keys = ["b", "num_subsample", "num_repeat"]
+                for key in required_keys:
+                    if key not in loaded_params:
+                        raise ValueError(f"Missing required parameter: '{key}' in the loaded configuration.")
+                b = loaded_params["b"]
+                num_subsample = loaded_params["num_subsample"]
+                num_repeat = loaded_params["num_repeat"]
+                loaded_params["total_samples_required"] = find_number_of_samples_used(self.q, self.n, b, num_subsample, num_repeat)
+                with open(output_path, 'w') as f:
+                    json.dump(loaded_params, f, indent=4)
+                self.run_params = loaded_params
+                print(f"Parameters loaded from {self.run_params} and saved to {output_path}")
+            except FileNotFoundError:
+                raise FileNotFoundError(f"File not found at: {self.run_params}")
+            except json.JSONDecodeError:
+                raise ValueError(f"File at {self.run_params} is not a valid JSON file.")    
+        elif isinstance(self.run_params, dict):
+            # Check for required parameters and update total_samples_required
+            required_keys = ["b", "num_subsample", "num_repeat"]
+            for key in required_keys:
+                if key not in self.run_params:
+                    raise ValueError(f"Missing required parameter: '{key}' in the loaded configuration.")
+            b = self.run_params["b"]
+            num_subsample = self.run_params["num_subsample"]
+            num_repeat = self.run_params["num_repeat"]
+            self.run_params["total_samples_required"] = find_number_of_samples_used(self.q, self.n, b, num_subsample, num_repeat)
+            output_path = os.path.join(self.exp_dir, "params.json")
+            with open(output_path, 'w') as f:
+                json.dump(self.run_params, f, indent=4)
+            print(f"Parameters saved to {output_path}")
+        else:
+            raise TypeError(f"self.run_params must be a string, Path, or dictionary, not {type(self.run_params).__name__}.") 
 
 
     def _find_best_params(self, budget):
@@ -256,6 +351,13 @@ class Explainer:
             raise ValueError(f"Budget of {budget} is too small. Even with b=1, C=1, and P1=1, it is exceeded.")
         b = best_b
 
+        # Check how many samples it would cost to go to the next b. Print to user to increase b if the cost is insignificant.
+        if b + 1 <= self.n: 
+            cost_next_b = find_number_of_samples_used(self.q, self.n, b + 1, num_subsample, num_repeat)
+            cost_diff = cost_next_b - budget
+            if cost_diff > 0 and (cost_diff / budget <= 0.10 or cost_diff < 1000):
+                warnings.warn(f"To significantly improve results, consider increasing your budget to {cost_next_b} samples (an increase of {cost_diff} samples).")
+
         # Now, increase num_subsample and num_repeat until we find one that maximizes the budget
         while True:
             # Increase num_subsample
@@ -280,7 +382,7 @@ class Explainer:
             "b": b,
             "num_subsample": num_subsample,
             "num_repeat": num_repeat,
-            "total_samples": final_samples
+            "total_samples_required": final_samples
         }
 
 
@@ -294,15 +396,17 @@ class Explainer:
         Ds = self.run_params['num_repeat']
 
         # Concatenate all subsampled Fourier transforms into one long array
-        Us = np.array([])
+        all_transforms = []
         for i in range(Ms):
             for j in range(Ds):
                 transform_file = Path(exp_dir) / "train" / "transforms" / f"U{i}_D{j}.pickle"
                 if transform_file.is_file():
-                    Us = np.concatenate((Us, np.array(list(load_data(transform_file)[0].values())).flatten()))
+                    all_transforms.append(np.array(list(load_data(transform_file)[0].values())).flatten())
+        Us = np.concatenate(all_transforms).flatten()
 
         # Estimate noise_sd hyperparameter that minimizes NMSE based on the magnitudes of the Fourier coefficients as 0.05 times the median magnitude
-        magnitudes = np.abs(Us).flatten()
+        magnitudes = np.abs(Us)
+        print('MAG', magnitudes[0], len(magnitudes))
         median = np.median(magnitudes)
         estimated_cutoff = 0.05 * median
         estimated_noise_sd = self._compute_noise_sd_from_cutoff(estimated_cutoff, self.q, self.run_params['b'])
@@ -694,8 +798,171 @@ class Explainer:
         plt.close(fig)
 
 
-def init(q, n, sampling_function, exp_dir):
+    def _save_top_shap_values(self, output_folder, top_values=10):
+        """
+        Calculates and saves the top average SHAP values for each feature
+        (e.g., 'A' at position 5) across all sequences. See Appendix E.4.
+
+        Args:
+            output_folder (str): Folder where the output csv will be saved.
+            top_values (int, optional): How many values to save per positive and negative grouping.
+        """
+        shap_array = self._convert_shap_to_array()
+
+        # Tally the sum and count for each (position, feature) pair
+        sum_positive = {}
+        count_positive = {}
+        sum_negative = {}
+        count_negative = {}
+
+        for i, seq in enumerate(self.sequences):
+            for pos, nt in enumerate(seq):
+                value = shap_array[i, pos]
+                key = (pos, nt.upper()) 
+                if value > 0:
+                    sum_positive[key] = sum_positive.get(key, 0) + value
+                    count_positive[key] = count_positive.get(key, 0) + 1
+                elif value < 0:
+                    sum_negative[key] = sum_negative.get(key, 0) + value
+                    count_negative[key] = count_negative.get(key, 0) + 1
+        
+        # Calculate the average SHAP value for each feature
+        avg_positive = {k: sum_positive[k] / count_positive[k] for k in sum_positive}
+        avg_negative = {k: sum_negative[k] / count_negative[k] for k in sum_negative}
+
+        # Sort to find the top values
+        top_positive = dict(sorted(avg_positive.items(), key=lambda item: item[1], reverse=True)[:top_values])
+        top_negative = dict(sorted(avg_negative.items(), key=lambda item: item[1])[:top_values])
+        
+        # Save to CSV
+        output_path = output_folder / 'top_shapzero_values.csv'
+        data_for_df = []
+        for (pos, feat), val in top_positive.items():
+            data_for_df.append(['Positive', pos, feat, val])
+        for (pos, feat), val in top_negative.items():
+            data_for_df.append(['Negative', pos, feat, val])
+        df = pd.DataFrame(data_for_df, columns=['Type', 'Position', 'Feature', 'Average SHAP Value'])
+        df.to_csv(output_path, index=False)
+
+
+    def _save_all_shap_values(self, output_folder):
+        """
+        Saves the raw SHAP values for every position in every sequence to a CSV file.
+
+        Args:
+            output_folder (str): Folder where the output csv will be saved.
+        """
+        output_path = output_folder / 'all_shapzero_values.csv'
+        shap_array = self._convert_shap_to_array()
+        seq_df = pd.DataFrame(self.sequences, columns=['Sequence'])
+        shap_columns = [f'Position_{i+1}' for i in range(shap_array.shape[1])]
+        shap_df = pd.DataFrame(shap_array, columns=shap_columns)
+        final_df = pd.concat([seq_df, shap_df], axis=1)
+        final_df.to_csv(output_path, index=False)
+
+
+    def _save_top_interactions(self, output_folder, top_values=10, min_order=2):
+        """
+        Calculates and saves the top average SHAP interactions across all sequences. See Appendix E.4.
+
+        Args:
+            output_folder (str): Folder where the output csv will be saved.
+            top_values (int, optional): How many values to save per positive and negative grouping.
+            min_order (int, optional): The minimum order of interactions to include in the plot (only for interaction plots).
+        """
+        output_path = output_folder / 'top_shapzero_interactions.csv'
+        pos_interactions = {}
+        pos_counts = {}
+        neg_interactions = {}
+        neg_counts = {}
+
+        for seq, interaction_dict in zip(self.sequences, self.shapzero_results):
+            # Filter for interactions of the minimum order
+            filtered_interactions = {k: v for k, v in interaction_dict.items() if len(k) >= min_order}
+
+            for positions, value in filtered_interactions.items():
+                # Create a canonical key: tuple of features, tuple of positions
+                nucleotides = tuple(seq[pos].upper() for pos in positions)
+                key = (nucleotides, tuple(p for p in positions))
+
+                if value > 0:
+                    pos_interactions[key] = pos_interactions.get(key, 0) + value
+                    pos_counts[key] = pos_counts.get(key, 0) + 1
+                elif value < 0:
+                    neg_interactions[key] = neg_interactions.get(key, 0) + value
+                    neg_counts[key] = neg_counts.get(key, 0) + 1
+
+        # Calculate averages
+        avg_pos = {k: v / pos_counts[k] for k, v in pos_interactions.items()}
+        avg_neg = {k: v / neg_counts[k] for k, v in neg_interactions.items()}
+
+        # Get top interactions sorted by absolute value
+        top_pos = dict(sorted(avg_pos.items(), key=lambda x: abs(x[1]), reverse=True)[:top_values])
+        top_neg = dict(sorted(avg_neg.items(), key=lambda x: abs(x[1]), reverse=True)[:top_values])
+
+        # Save to CSV
+        data_for_df = []
+        for sign, interactions in [("Positive", top_pos), ("Negative", top_neg)]:
+            for (features, positions), value in interactions.items():
+                data_for_df.append([
+                    sign,
+                    ', '.join(map(str, positions)),
+                    ', '.join(features),
+                    value
+                ])
+        df = pd.DataFrame(data_for_df, columns=['Type', 'Positions', 'Features', 'Average SHAP Interaction'])
+        df.to_csv(output_path, index=False)
+
+
+    def _save_all_interactions(self, output_folder):
+        """
+        Saves all raw interactions for every sequence to a CSV file.
+        The interactions for each sequence are stored as a JSON string in a single cell.
+
+        Args:
+            output_folder (str): Folder where the output csv will be saved.
+        """
+        output_path = output_folder / 'all_shapzero_interactions.csv'
+        def convert_keys_to_str(obj):
+            if isinstance(obj, dict):
+                return {str(k): v for k, v in obj.items()}
+            return obj
+
+        data_for_df = []
+        for seq, interactions in zip(self.sequences, self.shapzero_results):
+            interactions_json = json.dumps(convert_keys_to_str(interactions))
+            data_for_df.append([seq, interactions_json])
+        df = pd.DataFrame(data_for_df, columns=['Sequence', 'Interactions'])
+        df.to_csv(output_path, index=False)
+
+
+def init(q, n, exp_dir, model=None, fourier_transform=None, fourier_params=None):
     """
     Initializes the SHAP zero explainer.
     """
-    return Explainer(q, n, sampling_function, exp_dir)
+    return Explainer(q, n, exp_dir, model, fourier_transform, fourier_params)
+
+
+def load_dna_example():
+    """
+    Example comes from inDelphi training data (1872 sequences).
+    To minimize computations, we make the training sequences be composed of 10 nucleotides around the cut site.
+    Data is one-hot encoded, so X_DNA.pkl is a 2D numpy array of shape (1872, 40) and y_DNA.pkl is a 1d numpy array of shape (1872,).
+    """
+    file_dir = os.path.dirname(__file__)
+    file_path = os.path.join(file_dir, "example_data")
+    X_DNA_train = np.load(os.path.join(file_path, "X_DNA_train.pkl"), allow_pickle=True)
+    y_DNA_train = np.load(os.path.join(file_path, "y_DNA_train.pkl"), allow_pickle=True)
+    return X_DNA_train, y_DNA_train, 
+
+
+def load_dna_sequences_to_explain():
+    """
+    Heldout inDelphi sequences (84 sequences).
+    To minimize computations, we make the training sequences be composed of 10 nucleotides around the cut site.
+    Data is a list of strings of length 84.
+    """
+    file_dir = os.path.dirname(__file__)
+    file_path = os.path.join(file_dir, "example_data")
+    DNA_seqs = np.load(os.path.join(file_path, "DNA_sequences.pkl"), allow_pickle=True)
+    return DNA_seqs

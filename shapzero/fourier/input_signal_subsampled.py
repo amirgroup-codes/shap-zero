@@ -3,7 +3,6 @@ from .input_signal import Signal
 from .query import get_Ms_and_Ds
 from pathlib import Path
 from math import floor
-from tqdm import tqdm
 import numpy as np
 import random
 import time
