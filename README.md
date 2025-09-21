@@ -76,7 +76,7 @@ explainer.save()
 # Explain sequences using Shapley interactions
 interaction = explainer.explain(sample, explanation='interaction')  # list of interactions
 print(interactions[0])
->> {(0, 7): 2.867415008537887,   # interaction between the 1st and 6th nucleotides
+>> {(0, 7): 2.867415008537887,   # interaction between the 1st and 8th nucleotides
 >>  (6, 7): -1.2684576082389891,
 >>  (4, 5): 0.4493051300654991: 
 >>  ...}

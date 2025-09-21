@@ -621,7 +621,7 @@ class Explainer:
             bottom_positive += positive_values
             bottom_negative += negative_values
 
-        ax.set_xlabel('Sequence Position')
+        ax.set_xlabel('Sequence position')
         ax.set_ylabel(y_label)
         ax.set_xlim(0.5, seq_length + 0.5)
         ax.axhline(0, color='black', linestyle='-', linewidth=0.5)
