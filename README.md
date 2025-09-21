@@ -1,4 +1,11 @@
-# SHAP zero: Explaining Biological Sequence Models <img src="assets/SHAPzero.svg" alt="SHAP zero logo" align="right" height="250px"/>
+# SHAP zero: Explaining Biological Sequence Models <img src="assets/SHAPzero.svg" alt="SHAP zero logo" align="right" height="200px"/>
+
+[![PyPI version](https://badge.fury.io/py/shapzero.svg)](https://badge.fury.io/py/shapzero)
+[![PyPI - License](https://img.shields.io/pypi/l/shapzero.svg)](https://opensource.org/licenses/MIT)
+[![PyPI Status](https://img.shields.io/pypi/status/shapzero.svg?color=blue)](https://pypi.org/project/shapzero)
+[![PyPI Version](https://img.shields.io/pypi/pyversions/shapzero.svg)](https://pypi.org/project/shapzero)
+[![Code Style](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Last Commit](https://img.shields.io/github/last-commit/amirgroup-codes/shap-zero)](https://github.com/amirgroup-codes/shap-zero/commits/main)
 
 SHAP zero is a Python package that enables the amortized computation of Shapley values and interactions. It does this by paying a one-time cost to sketch the model's Fourier transform. After this one-time cost, SHAP zero enables **near-zero marginal cost** for future query sequences by mapping the Fourier transform to Shapley values and interactions.
 
@@ -83,7 +90,7 @@ explainer.save()
 
 ## Load a previously computed Fourier transform
 
-If you previously ran `explainer.compute_fourier_transform()`, SHAP zero will automatically save the Fourier transform to `output_directory/fourier_transform.pickle`. To resume explaining from that previous checkpoint, you can load in the Fourier transform path into the `shapzero.init`.
+If you previously ran `explainer.compute_fourier_transform()`, SHAP zero will automatically save the Fourier transform to `output_directory/fourier_transform.pickle`. To resume explaining from that previous checkpoint, you can load in the Fourier transform path into `shapzero.init`.
 ```python
 explainer = shapzero.init(
     q=q,
@@ -118,7 +125,7 @@ For example, if our one-hot DNA model takes in as an input `[[1, 0, 0, 0], [0, 0
 
 ## What if my model uses a different input scheme/uses a unique architecture?
 
-In an effort to be compatible with every possible biological sequence model, SHAP zero is also fully capable of taking in *functions*, which SHAP zero will attempt to call to query said biological sequence model. We request that the input of the function is capable of taking in a 2D $q$-ary numpy array of shape `(num_samples, n)` and outputs a 1D numpy of shape `(num_samples,)`.
+In an effort to be compatible with every possible biological sequence model, SHAP zero is also fully capable of taking in user-written *functions*. We request that the input of the function is capable of taking in a 2D $q$-ary numpy array of shape `(num_samples, n)` and outputs a 1D numpy of shape `(num_samples,)`. Alternatively, your function can also take in as an input a list of sequences, where each sequence is a string of length `n`, and the list is of length `num_samples`. 
 
 Examples of possible functions:
 ```python
@@ -191,13 +198,13 @@ explainer = shapzero.init(
 
 ## Citation
 
-If you use `shapzero` and enjoy it, please consider citing our paper! SHAP zero was recently accepted into **NeurIPS 2025**, and we look forward to the great discussions!
+If you use `shapzero` and enjoy it, please consider citing our [paper](https://arxiv.org/pdf/2410.19236)! SHAP zero was recently accepted into **NeurIPS 2025**, and we look forward to the great discussions!
 
 ```bibtex
 @inproceedings{tsui2025shapzero,
   title={{SHAP} Zero Explains Biological Sequence Models with Near-zero Marginal Cost for Future Queries},
   author={Tsui, Darin and Musharaf, Aryan and Erginbas, Yigit E. and Kang, Justin S. and Aghazadeh, Amirali},
   booktitle={Advances in Neural Information Processing Systems (Accepted)},
-  year={2025},
+  year={2025}
 }
 ```

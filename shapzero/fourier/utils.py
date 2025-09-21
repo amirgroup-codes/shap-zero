@@ -16,55 +16,6 @@ import matplotlib.pyplot as plt
 
 from itertools import product
 
-def ft_matrix(q, n, banned_indices = {}):
-    '''
-    Generate matrix for Fourier Transform, optional banned indices arg to ban certain spots.
-    q = signal alphabet size
-    n = signal length
-    banned_indices = indices to ban, formatted as the index to be banned at with the values in a list
-    (ex: if we want to ban the numbers 2 and 3 at the first index, we would have {0:[2,3]})
-    '''
-    all_pairs = list(product(range(q), repeat=n))
-    qs = np.repeat(q, n)
-    for key, value in banned_indices.items():
-        qs[key] -= len(value) 
-    filtered_pairs = [
-        pair for pair in all_pairs
-        if all(pair[key] not in values for key, values in banned_indices.items())
-    ]
-    omegas = []
-    for q in qs:
-        omegas.append(np.exp(2j * np.pi/q))
-    matrix = np.empty((len(filtered_pairs), len(filtered_pairs)), dtype=complex)
-    for row_index, rowpair in enumerate(filtered_pairs):
-        for col_index, colpair in enumerate(filtered_pairs):
-            hadamard_array = np.multiply(rowpair, colpair)
-            entry = np.prod([omegas[i] ** hadamard_array[i] for i in range(n)])
-            matrix[row_index, col_index] = entry
-    return matrix
-
-def tft(x, q, n, banned_indices={}, normalize=False):
-    '''
-    Returns truncated fourier transform of input signal with banned indices. Optional 'normalize'
-    argument normalizes the fourier transform by the square root of the length of the signal q^n.
-    '''
-    normalization_factor = np.sqrt(q**n)
-    W_inv = np.linalg.inv(ft_matrix(q, n, banned_indices))
-    result = np.dot(W_inv, x)
-    if normalize:
-        result /= normalization_factor
-    return result
-
-def get_qs(q_max, n, banned_indices={}):
-    '''
-    Returns the alphabet size (qs) for each site (n) in the sequence. 
-    Returns length n vector of only qs if banned_indices arg is left blank.
-    '''
-    qs = np.repeat(q_max, n)
-    for key, value in banned_indices.items():
-        qs[key] -= len(value) 
-    return qs
-
 def fwht(x):
     """Recursive implementation of the 1D Cooley-Tukey FFT"""
     # x = np.asarray(x, dtype=float)
@@ -76,7 +27,6 @@ def fwht(x):
         X_odd = fwht(x[(N//2):])
         return np.concatenate([(X_even + X_odd),
                                (X_even - X_odd)])
-
 
 def gwht(x,q,n):
     """Computes the GWHT of an input signal with forward scaling"""

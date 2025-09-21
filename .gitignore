@@ -1,3 +1,5 @@
 __pycache__/
 fourier/__pycache__/
 shap/__pycache__/
+dist/
+shapzero.egg-info/

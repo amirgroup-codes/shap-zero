@@ -311,21 +311,3 @@ class QSFT(Signal):
             }
 
             return result
-        
-    def get_alpha(n):
-        n = n / n**2
-        sgn = -1 if n < 0 else 1
-        scale = int(-math.floor(math.log10(abs(n))))
-        if scale <= 0:
-            scale = 1
-        factor = 10**scale
-        number = sgn*math.floor(abs(n)*factor)/factor
-        scaling_factor = int(str(sgn*math.floor(abs(n)*factor))[:1])
-        if scaling_factor == 0:
-            scaling_factor = 1
-        return number/scaling_factor
-    
-    def residual_sq(A, gwht, y):
-        residual = np.dot(A, list(gwht)) - y
-        residual_squared = np.linalg.norm(residual)**2 
-        return residual_squared

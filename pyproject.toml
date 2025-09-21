@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shapzero"
+version = "0.0.2" # You should update this version number for new releases.
+authors = [
+    { name="Darin Tsui", email="darint@gatech.edu" },
+]
+description = "A Python package for explaining biological sequence models using Shapley values and interactions."
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License", 
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Development Status :: 4 - Beta"
+]
+keywords = ["SHAP", "explainable AI", "bioinformatics", "computational biology", "machine learning", "biological sequence models", "interactions"]
+
+dependencies = [
+    "numpy",
+    "pandas",
+    "matplotlib",
+    "scikit-learn",
+    "scipy",
+    "tqdm"
+]
+
+[project.urls]
+Homepage = "https://github.com/amirgroup-codes/shap-zero" 
+"Bug Tracker" = "https://github.com/amirgroup-codes/shap-zero/issues" 
+
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["shapzero*"]
+exclude = ["assets*"]
+
+[tool.setuptools.package-data]
+"shapzero" = ["example_data/*.pkl"]
