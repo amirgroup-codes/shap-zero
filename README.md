@@ -202,7 +202,7 @@ If you use `shapzero` and enjoy it, please consider citing our [paper](https://a
 
 ```bibtex
 @inproceedings{tsui2025shapzero,
-  title={{SHAP} Zero Explains Biological Sequence Models with Near-zero Marginal Cost for Future Queries},
+  title={{SHAP} zero Explains Biological Sequence Models with Near-zero Marginal Cost for Future Queries},
   author={Tsui, Darin and Musharaf, Aryan and Erginbas, Yigit E. and Kang, Justin S. and Aghazadeh, Amirali},
   booktitle={Advances in Neural Information Processing Systems (Accepted)},
   year={2025}
