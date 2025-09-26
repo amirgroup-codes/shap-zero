@@ -1,0 +1,8 @@
+q = 4, n = 10, b = 4, noise_sd = 3.62449426973054
+
+Total samples = 25344
+Total sample ratio = 0.024169921875
+R^2 = 0.9555694571062362
+NMSE = 0.044257615404108636
+AVG Hamming Weight of Nonzero Locations = 1.9039301310043668
+Max Hamming Weight of Nonzero Locations = 2

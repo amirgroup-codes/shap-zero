@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shapzero"
-version = "0.0.2" # You should update this version number for new releases.
+version = "0.0.3" 
 authors = [
     { name="Darin Tsui", email="darint@gatech.edu" },
 ]
@@ -42,7 +42,7 @@ package-dir = {"" = "."}
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["shapzero*"]
-exclude = ["assets*"]
+exclude = ["assets*", "example*"]
 
 [tool.setuptools.package-data]
 "shapzero" = ["example_data/*.pkl"]
