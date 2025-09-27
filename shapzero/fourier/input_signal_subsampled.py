@@ -345,8 +345,8 @@ class SubsampledSignal(Signal):
         base_ids_dec
         Indicies to be queried in decimal representation
         """
-        n_samples = np.minimum(n_samples, self.N)
-        base_inds_dec = [randint(0, self.N-1) for _ in range(n_samples)]
+        num_to_sample = min(n_samples, self.N)
+        base_inds_dec = [randint(0, self.N - 1) for _ in range(num_to_sample)]
         return base_inds_dec
 
     def get_MDU(self, ret_num_subsample, ret_num_repeat, b, trans_times=False):

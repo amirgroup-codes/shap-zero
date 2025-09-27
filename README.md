@@ -128,12 +128,14 @@ For example, if our one-hot DNA model takes in as an input `[[1, 0, 0, 0], [0, 0
 In an effort to be compatible with every possible biological sequence model, SHAP zero is also fully capable of taking in user-written *functions*. We request that the input of the function is capable of taking in a 2D $q$-ary numpy array of shape `(num_samples, n)` and outputs a 1D numpy of shape `(num_samples,)`. Alternatively, your function can also take in as an input a list of sequences, where each sequence is a string of length `n`, and the list is of length `num_samples`. 
 
 Examples of possible functions:
+### 1. Mathematical functions
 ```python
 def model(X):
     """
     Computes y = 5 * X[:, 0] - 2 * X[:, 3] + X[:, 1] * X[:, 4]
     """
-    return y = 5 * X[:, 0] - 2 * X[:, 3] + X[:, 1] * X[:, 4]
+    y = 5 * X[:, 0] - 2 * X[:, 3] + X[:, 1] * X[:, 4]
+    return y
 explainer = shapzero.init(
     q=q,
     n=n,
@@ -141,7 +143,7 @@ explainer = shapzero.init(
     model=model
 )
 ```
-
+### 2. Models with pre-defined initializations 
 ```python
 # Assume 'load_model' and 'compute_model_scores' are functions from an external library
 def load_model(model_path):
@@ -195,6 +197,52 @@ explainer = shapzero.init(
     model=scorer.predict  # pass the wrapper here
 )
 ```
+### 3. Models with three channels (e.g., CNNs)
+```python
+def load_model(model_path):
+    ...
+
+def compute_scores(model, qary_numpy_array, q, n):
+    """
+    Handles the data conversion from q-ary to a model that takes as an input (batch, q, n)
+    """
+    num_samples = qary_numpy_array.shape[0]
+    # 1. One-hot encode the (batch, n) q-ary data to (batch, n, q)
+    one_hot = np.zeros((num_samples, n, q))
+    one_hot[np.arange(num_samples)[:, None], np.arange(n), qary_numpy_array] = 1
+    # 2. Transpose from (batch, n, q) to (batch, q, n)
+    one_hot_transposed = np.transpose(one_hot, (0, 2, 1))
+    input_tensor = torch.from_numpy(one_hot_transposed).float()
+    with torch.no_grad():
+        output_tensor = model(input_tensor)
+    return output_tensor.numpy().flatten()
+
+# Define a wrapper
+class ModelScorer:
+    def __init__(self, model_path, q, n):
+        self.model = load_cnn_model(model_path, q, n)
+        self.q = q
+        self.n = n
+
+    def predict(self, samples_numpy_array):
+        scores = compute_cnn_scores(
+            model=self.model,
+            qary_numpy_array=samples_numpy_array,
+            q=self.q,
+            n=self.n
+        )
+        return np.array(scores)
+
+model_path = "model"
+scorer = ModelScorer(model_path="model", q=q, n=n)
+explainer = shapzero.init(
+    q=q,
+    n=n,
+    exp_dir=output_dir,
+    model=scorer.predict  # pass the wrapper here
+)
+```
+
 
 ## Citation
 
